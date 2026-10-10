@@ -1,0 +1,1381 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AquaGuard IoT - Monitoreo Inteligente de Agua ZMG</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Leaflet CSS & JS for ZMG Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                        },
+                        eco: {
+                            500: '#10b981',
+                            600: '#059669'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+        .dark .glass-card {
+            background: rgba(15, 23, 42, 0.88);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(51, 65, 85, 0.8);
+        }
+        
+        .pulse-wave {
+            box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.4);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.4); }
+            70% { box-shadow: 0 0 0 15px rgba(2, 132, 199, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0); }
+        }
+
+        .phone-notch {
+            width: 120px;
+            height: 20px;
+            background-color: #0f172a;
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+        }
+
+        #zmg-map {
+            height: 380px;
+            border-radius: 1rem;
+            z-index: 10;
+        }
+
+        /* Custom scrollbar for simulator details */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(241, 245, 249, 0.5);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans antialiased selection:bg-brand-500 selection:text-white transition-colors duration-300">
+
+    <header class="sticky top-0 z-50 glass-card border-b border-slate-200/80 dark:border-slate-800/80 transition-all duration-300">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-cyan-400 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+                    <i class="fa-solid font-bold fa-faucet-drip text-xl"></i>
+                </div>
+                <div>
+                    <span class="text-xl font-extrabold bg-gradient-to-r from-brand-800 via-brand-600 to-cyan-500 bg-clip-text text-transparent dark:from-brand-300 dark:to-cyan-400">AquaGuard <span class="text-xs px-2 py-0.5 rounded-full bg-brand-100 dark:bg-brand-900/60 text-brand-700 dark:text-brand-300 font-semibold uppercase">IoT ZMG</span></span>
+                    <p class="text-[10px] text-slate-500 dark:text-slate-400 font-medium tracking-tight">CUGDL - Universidad de Guadalajara</p>
+                </div>
+            </div>
+
+            <nav class="hidden lg:flex items-center gap-7 font-medium text-xs uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                <a href="#problema" class="hover:text-brand-600 transition-colors">El Problema</a>
+                <a href="#ods" class="hover:text-brand-600 transition-colors">ODS Impacto</a>
+                <a href="#tecnologia" class="hover:text-brand-600 transition-colors">Arquitectura</a>
+                <a href="#mapa-zmg" class="hover:text-brand-600 transition-colors">Mapa ZMG</a>
+                <a href="#dashboard" class="hover:text-brand-600 transition-colors">Simulador</a>
+                <a href="#app-demo" class="hover:text-brand-600 transition-colors">App Móvil</a>
+                <a href="#negocio" class="hover:text-brand-600 transition-colors">Modelo Negocio</a>
+                <a href="#equipo" class="hover:text-brand-600 transition-colors">Equipo CUGDL</a>
+            </nav>
+
+            <div class="flex items-center gap-3">
+                <!-- Theme Toggle Button -->
+                <button onclick="toggleDarkMode()" title="Cambiar Tema" class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center">
+                    <i class="fa-solid fa-moon dark:hidden"></i>
+                    <i class="fa-solid fa-sun hidden dark:inline"></i>
+                </button>
+
+                <a href="#dashboard" class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs shadow-lg shadow-brand-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2">
+                    <i class="fa-solid fa-gauge-high"></i>
+                    <span class="hidden sm:inline">Ver Monitoreo</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <section class="relative overflow-hidden bg-gradient-to-b from-brand-50/60 via-slate-50 to-white dark:from-slate-900 dark:via-slate-950 dark:to-slate-950 pt-10 pb-16 lg:pt-16 lg:pb-24 transition-colors">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid lg:grid-cols-12 gap-12 items-center">
+                <div class="lg:col-span-7 space-y-6 text-center lg:text-left">
+                    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300 text-xs font-semibold uppercase tracking-wider border border-sky-200 dark:border-sky-800">
+                        <span class="w-2 h-2 rounded-full bg-brand-500 animate-ping"></span>
+                        Seguridad Hídrica & Monitoreo Autónomo
+                    </div>
+                    <h1 class="text-3xl sm:text-5xl lg:text-6xl font-black text-slate-900 dark:text-white leading-tight">
+                        Datos en tiempo real, comunidades <span class="bg-gradient-to-r from-brand-600 to-cyan-500 bg-clip-text text-transparent">resilientes en la ZMG</span>
+                    </h1>
+                    <p class="text-base sm:text-lg text-slate-600 dark:text-slate-300 max-w-2xl font-normal leading-relaxed">
+                        Sistema multietapa IoT impulsado por microcontroladores ESP32 para diagnosticar la calidad del agua desde la red pública del SIAPA, pasando por el almacenamiento en tinaco, hasta el filtro del hogar.
+                    </p>
+
+                    <div class="flex flex-wrap items-center justify-center lg:justify-start gap-4 pt-2">
+                        <a href="#dashboard" class="px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm shadow-xl shadow-brand-600/25 transition-all hover:-translate-y-0.5">
+                            <i class="fa-solid fa-chart-line mr-2"></i> Probar Simulador Vivo
+                        </a>
+                        <button onclick="openReportModal()" class="px-6 py-3 rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white font-bold text-sm shadow-md transition-all">
+                            <i class="fa-solid fa-file-shield mr-2 text-cyan-400"></i> Generar Reporte SIAPA
+                        </button>
+                    </div>
+
+                    <!-- Metrics Badges -->
+                    <div class="grid grid-cols-3 gap-4 pt-6 border-t border-slate-200 dark:border-slate-800 max-w-lg mx-auto lg:mx-0">
+                        <div>
+                            <div class="text-2xl font-bold text-slate-900 dark:text-white">3 Etapas</div>
+                            <div class="text-xs text-slate-500 dark:text-slate-400 font-medium">SIAPA, Tinaco y Filtro</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-slate-900 dark:text-white">ESP32</div>
+                            <div class="text-xs text-slate-500 dark:text-slate-400 font-medium">Wi-Fi + BLE IoT</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-slate-900 dark:text-white">ODS 6</div>
+                            <div class="text-xs text-slate-500 dark:text-slate-400 font-medium">Agua Limpia & Salud</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hero Interactive Diagram Preview -->
+                <div class="lg:col-span-5 relative">
+                    <div class="absolute -top-10 -right-10 w-72 h-72 bg-brand-200/50 dark:bg-brand-900/30 rounded-full blur-3xl -z-10"></div>
+                    <div class="absolute -bottom-10 -left-10 w-72 h-72 bg-cyan-200/50 dark:bg-cyan-900/30 rounded-full blur-3xl -z-10"></div>
+                    
+                    <div class="bg-slate-900 text-white rounded-3xl p-6 shadow-2xl border border-slate-800 space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span class="text-xs font-mono text-slate-300">NODO_ZMG_ZAPOPAN_01</span>
+                            </div>
+                            <span class="text-[10px] px-2 py-0.5 rounded bg-brand-900 text-brand-300 font-mono">ESP32 ONLINE</span>
+                        </div>
+
+                        <!-- Live Feed Small Mock -->
+                        <div class="space-y-3 font-mono text-xs">
+                            <div class="p-3 rounded-xl bg-slate-800/80 border border-slate-700/60 flex justify-between items-center">
+                                <div>
+                                    <p class="text-slate-400">1. Entrada Red (SIAPA)</p>
+                                    <p class="text-amber-400 font-bold">Turbiedad: <span id="hero-turb1">4.8</span> NTU</p>
+                                </div>
+                                <span class="text-amber-400 bg-amber-400/10 px-2 py-1 rounded text-[10px]">Precaución</span>
+                            </div>
+
+                            <div class="p-3 rounded-xl bg-slate-800/80 border border-slate-700/60 flex justify-between items-center">
+                                <div>
+                                    <p class="text-slate-400">2. Almacenamiento (Tinaco)</p>
+                                    <p class="text-emerald-400 font-bold">Nivel: <span id="hero-nivel">75</span>% | Temp: 24°C</p>
+                                </div>
+                                <span class="text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded text-[10px]">Óptimo</span>
+                            </div>
+
+                            <div class="p-3 rounded-xl bg-slate-800/80 border border-slate-700/60 flex justify-between items-center">
+                                <div>
+                                    <p class="text-slate-400">3. Salida Final (Post-Filtro)</p>
+                                    <p class="text-emerald-400 font-bold">TDS: <span id="hero-tds">120</span> ppm | pH: 7.1</p>
+                                </div>
+                                <span class="text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded text-[10px]">Agua Segura</span>
+                            </div>
+                        </div>
+
+                        <div class="text-center pt-2">
+                            <a href="#dashboard" class="text-xs text-brand-400 hover:text-brand-300 underline font-sans">Simular alteración de parámetros &rarr;</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="problema" class="py-16 bg-white dark:bg-slate-900 transition-colors">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-14">
+                <span class="text-brand-600 font-extrabold uppercase tracking-wider text-xs bg-brand-50 dark:bg-brand-950 px-3 py-1 rounded-full border border-brand-200 dark:border-brand-800">Diagnóstico Territorial ZMG</span>
+                <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white mt-3">La Crisis de Agua Turbia en Guadalajara</h2>
+                <p class="text-slate-600 dark:text-slate-300 mt-3 text-sm sm:text-base">Evidencia técnica, periodística y comunitaria respalda la necesidad de monitoreo ciudadano con trazabilidad digital.</p>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Card 1 -->
+                <div class="p-8 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:shadow-lg transition-all">
+                    <div class="w-12 h-12 rounded-xl bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 flex items-center justify-center text-xl font-bold mb-6">
+                        <i class="fa-solid fa-faucet-drip"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Agua Turbia y Sedimentos</h3>
+                    <p class="text-slate-600 dark:text-slate-300 text-xs sm:text-sm leading-relaxed">
+                        Colonias en Zapopan, Guadalajara, Tlaquepaque y Tonalá reportan descargas periódicas con alta turbiedad, olor fétido y sedimentos acumulados procedentes de tuberías obsoletas.
+                    </p>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="p-8 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:shadow-lg transition-all">
+                    <div class="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl font-bold mb-6">
+                        <i class="fa-solid fa-notes-medical"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Riesgo Sanitario y Dermatológico</h3>
+                    <p class="text-slate-600 dark:text-slate-300 text-xs sm:text-sm leading-relaxed">
+                        Uso doméstico de agua con altos sólidos disueltos causa irritaciones cutáneas, dermatitis y afecciones estomacales por la inestabilidad de cloración en las redes locales.
+                    </p>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="p-8 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:shadow-lg transition-all">
+                    <div class="w-12 h-12 rounded-xl bg-brand-100 dark:bg-brand-950 text-brand-600 dark:text-brand-400 flex items-center justify-center text-xl font-bold mb-6">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Opacidad Informativa</h3>
+                    <p class="text-slate-600 dark:text-slate-300 text-xs sm:text-sm leading-relaxed">
+                        Falta de sensores de libre acceso para los vecinos. AquaGuard permite constatar con rigor de datos si la calidad cumple con la Norma Oficial Mexicana NOM-127-SSA1.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Double-Filter Framework Banner -->
+            <div class="mt-12 p-6 rounded-2xl bg-brand-900 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-full bg-brand-700 flex items-center justify-center flex-shrink-0 text-xl text-cyan-300">
+                        <i class="fa-solid fa-filter-circle-dollar"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold text-sm sm:text-base">Estrategia Epistemológica Doble Filtro: SIFT + CRAAP</p>
+                        <p class="text-xs text-brand-200">Validación rigurosa de fuentes científicas, periodísticas (UDG, ITESO) e institucionales para sustentar denuncias públicas y reportes técnicos.</p>
+                    </div>
+                </div>
+                <button onclick="toggleFrameworkModal()" class="px-5 py-2.5 rounded-xl bg-white text-brand-900 hover:bg-brand-50 font-bold text-xs uppercase tracking-wider transition-colors whitespace-nowrap">
+                    Ver Metodología
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <section id="ods" class="py-16 bg-slate-900 text-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-14">
+                <span class="text-cyan-400 font-extrabold uppercase tracking-wider text-xs bg-slate-800 px-3 py-1 rounded-full border border-slate-700">Agenda 2030 de la ONU</span>
+                <h2 class="text-3xl sm:text-4xl font-extrabold text-white mt-3">Alineación con Objetivos Sostenibles</h2>
+                <p class="text-slate-400 mt-2 text-sm">Tecnología con propósito para transformar la resiliencia hídrica de Jalisco.</p>
+            </div>
+
+            <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- ODS 6 -->
+                <div class="p-6 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-cyan-500/50 transition-all">
+                    <div class="w-12 h-12 rounded-xl bg-cyan-500 text-white flex items-center justify-center font-black text-2xl mb-4">
+                        6
+                    </div>
+                    <h3 class="text-base font-bold text-white mb-2">Agua Limpia y Saneamiento</h3>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Monitoreo continuo e independiente de turbiedad, pH y sólidos disueltos totales para garantizar la calidad del agua consumida.
+                    </p>
+                </div>
+
+                <!-- ODS 3 -->
+                <div class="p-6 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-emerald-500/50 transition-all">
+                    <div class="w-12 h-12 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-black text-2xl mb-4">
+                        3
+                    </div>
+                    <h3 class="text-base font-bold text-white mb-2">Salud y Bienestar</h3>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Prevención activa de enfermedades gastrointestinales y cutáneas mediante alertas tempranas ante contaminantes en la red.
+                    </p>
+                </div>
+
+                <!-- ODS 11 -->
+                <div class="p-6 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-amber-500/50 transition-all">
+                    <div class="w-12 h-12 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black text-2xl mb-4">
+                        11
+                    </div>
+                    <h3 class="text-base font-bold text-white mb-2">Ciudades Sostenibles</h3>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Construcción de mapas comunitarios de datos hídricos para fortalecer la toma de decisiones participativa en la metrópoli.
+                    </p>
+                </div>
+
+                <!-- ODS 12 -->
+                <div class="p-6 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-purple-500/50 transition-all">
+                    <div class="w-12 h-12 rounded-xl bg-purple-500 text-white flex items-center justify-center font-black text-2xl mb-4">
+                        12
+                    </div>
+                    <h3 class="text-base font-bold text-white mb-2">Consumo Responsable</h3>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Optimización del ciclo de vida de los filtros domésticos y mantenimiento preventivo del tinaco sin desperdiciar cartuchos.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="tecnologia" class="py-16 bg-slate-50 dark:bg-slate-950 transition-colors">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-14">
+                <span class="text-brand-600 font-extrabold uppercase tracking-wider text-xs bg-brand-100 dark:bg-brand-950 px-3 py-1 rounded-full border border-brand-200 dark:border-brand-800">Prototipo Multietapa</span>
+                <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white mt-3">Arquitectura IoT de Sensado Continuo</h2>
+                <p class="text-slate-600 dark:text-slate-300 mt-2 text-sm">Tres nodos físicamente distribuidos en el domicilio para un diagnóstico integral.</p>
+            </div>
+
+            <!-- Nodes Grid -->
+            <div class="grid md:grid-cols-3 gap-6 mb-8">
+                <!-- Node 1 -->
+                <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border-2 border-brand-200 dark:border-brand-800 relative hover:shadow-xl transition-all">
+                    <div class="absolute -top-3 left-6 px-3 py-0.5 rounded-full bg-brand-600 text-white text-[10px] font-bold uppercase">
+                        Nodo 1: Red SIAPA
+                    </div>
+                    <div class="mt-2 space-y-3">
+                        <div class="flex items-center gap-3">
+                            <i class="fa-solid fa-water text-2xl text-brand-600"></i>
+                            <h4 class="font-bold text-slate-900 dark:text-white text-base">Entrada de la Calle</h4>
+                        </div>
+                        <ul class="text-xs text-slate-600 dark:text-slate-300 space-y-2">
+                            <li class="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1">
+                                <span>Turbiedad (SEN0189)</span>
+                                <strong class="text-slate-800 dark:text-slate-200">0 - 1000 NTU</strong>
+                            </li>
+                            <li class="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1">
+                                <span>pH (SEN0161)</span>
+                                <strong class="text-slate-800 dark:text-slate-200">0 - 14 pH</strong>
+                            </li>
+                            <li class="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1">
+                                <span>Conductividad / TDS</span>
+                                <strong class="text-slate-800 dark:text-slate-200">Gravity Analog</strong>
+                            </li>
+                            <li class="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1">
+                                <span>Temperatura</span>
+                                <strong class="text-slate-800 dark:text-slate-200">DS18B20</strong>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Node 2 -->
+                <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border-2 border-cyan-200 dark:border-cyan-800 relative hover:shadow-xl transition-all">
+                    <div class="absolute -top-3 left-6 px-3 py-0.5 rounded-full bg-cyan-600 text-white text-[10px] font-bold uppercase">
+                        Nodo 2: Tinaco
+                    </div>
+                    <div class="mt-2 space-y-3">
+                        <div class="flex items-center gap-3">
+                            <i class="fa-solid fa-box-archive text-2xl text-cyan-600"></i>
+                            <h4 class="font-bold text-slate-900 dark:text-white text-base">Almacenamiento Hogar</h4>
+                        </div>
+                        <ul class="text-xs text-slate-600 dark:text-slate-300 space-y-2">
+                            <li class="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1">
+                                <span>Nivel de Agua</span>
+                                <strong class="text-slate-800 dark:text-slate-200">HC-SR04 Ultrasónico</strong>
+                            </li>
+                            <li class="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1">
+                                <span>Temperatura Líquida</span>
+                                <strong class="text-slate-800 dark:text-slate-200">DS18B20 Sumergible</strong>
+                            </li>
+                            <li class="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1">
+                                <span>Sedimentación</span>
+                                <strong class="text-slate-800 dark:text-slate-200">Cálculo Diferencial</strong>
+                            </li>
+                            <li class="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1">
+                                <span>Mantenimiento</span>
+                                <strong class="text-cyan-600 font-bold">Aviso de Limpieza</strong>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Node 3 -->
+                <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border-2 border-emerald-200 dark:border-emerald-800 relative hover:shadow-xl transition-all">
+                    <div class="absolute -top-3 left-6 px-3 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold uppercase">
+                        Nodo 3: Post-Filtro
+                    </div>
+                    <div class="mt-2 space-y-3">
+                        <div class="flex items-center gap-3">
+                            <i class="fa-solid fa-filter text-2xl text-emerald-600"></i>
+                            <h4 class="font-bold text-slate-900 dark:text-white text-base">Salida Final de Grifo</h4>
+                        </div>
+                        <ul class="text-xs text-slate-600 dark:text-slate-300 space-y-2">
+                            <li class="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1">
+                                <span>Turbiedad Salida</span>
+                                <strong class="text-emerald-600">&lt; 1.0 NTU</strong>
+                            </li>
+                            <li class="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1">
+                                <span>pH Neutro</span>
+                                <strong class="text-emerald-600">6.5 - 7.5</strong>
+                            </li>
+                            <li class="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1">
+                                <span>TDS Filtrado</span>
+                                <strong class="text-emerald-600">&lt; 200 ppm</strong>
+                            </li>
+                            <li class="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1">
+                                <span>Eficiencia Filtro</span>
+                                <strong class="text-slate-800 dark:text-slate-200">Vida útil %</strong>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center pt-2">
+                <button onclick="toggleFirmwareModal()" class="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white hover:bg-slate-800 text-xs font-bold transition-all inline-flex items-center gap-2">
+                    <i class="fa-solid fa-code text-cyan-400"></i>
+                    <span>Ver Código Firmware ESP32 (Arduino C++)</span>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <section id="mapa-zmg" class="py-16 bg-white dark:bg-slate-900 transition-colors">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-10">
+                <span class="text-brand-600 font-extrabold uppercase tracking-wider text-xs bg-brand-50 dark:bg-brand-950 px-3 py-1 rounded-full border border-brand-200 dark:border-brand-800">Geolocalización Metropolitana</span>
+                <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white mt-3">Estado del Agua por Colonia en la ZMG</h2>
+                <p class="text-slate-600 dark:text-slate-300 mt-2 text-sm">Haz clic en los nodos del mapa o selecciona una colonia para simular las condiciones del suministro local.</p>
+            </div>
+
+            <div class="grid lg:grid-cols-12 gap-8 items-center">
+                <!-- Map Left -->
+                <div class="lg:col-span-7 bg-slate-100 dark:bg-slate-800 p-4 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-md">
+                    <div id="zmg-map"></div>
+                </div>
+
+                <!-- Zone Details Right -->
+                <div class="lg:col-span-5 space-y-4">
+                    <div id="zone-card" class="bg-slate-50 dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <span id="zone-municipio" class="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-brand-100 dark:bg-brand-900 text-brand-800 dark:text-brand-200 font-bold">Zapopan</span>
+                                <h3 id="zone-colonia" class="text-xl font-extrabold text-slate-900 dark:text-white mt-1">Colonia Providencia</h3>
+                            </div>
+                            <span id="zone-badge" class="px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-xs font-bold">Estable</span>
+                        </div>
+
+                        <div class="space-y-2 text-xs">
+                            <div class="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+                                <span class="text-slate-500 dark:text-slate-400">Turbiedad Promedio SIAPA:</span>
+                                <strong id="zone-turb" class="font-mono text-slate-900 dark:text-white">1.8 NTU</strong>
+                            </div>
+                            <div class="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+                                <span class="text-slate-500 dark:text-slate-400">Nivel de pH Registrado:</span>
+                                <strong id="zone-ph" class="font-mono text-slate-900 dark:text-white">7.2 pH</strong>
+                            </div>
+                            <div class="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+                                <span class="text-slate-500 dark:text-slate-400">Sólidos Disueltos (TDS):</span>
+                                <strong id="zone-tds" class="font-mono text-slate-900 dark:text-white">210 ppm</strong>
+                            </div>
+                            <div class="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+                                <span class="text-slate-500 dark:text-slate-400">Último Reporte Comunitario:</span>
+                                <strong id="zone-time" class="text-slate-700 dark:text-slate-300">Hace 12 min</strong>
+                            </div>
+                        </div>
+
+                        <div id="zone-note" class="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300">
+                            Condiciones normales de potabilidad según mediciones del sensor local.
+                        </div>
+
+                        <button onclick="loadZoneToSimulator()" class="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold transition-all shadow-md">
+                            Cargar estos datos en el Simulador &rarr;
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="dashboard" class="py-16 bg-slate-100 dark:bg-slate-950 transition-colors">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-12">
+                <span class="text-brand-600 font-extrabold uppercase tracking-wider text-xs bg-brand-100 dark:bg-brand-950 px-3 py-1 rounded-full border border-brand-200 dark:border-brand-800">Simulador de Lectura IoT</span>
+                <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white mt-3">Panel de Monitoreo Interactivo</h2>
+                <p class="text-slate-600 dark:text-slate-300 mt-2 text-sm">Ajusta los controles para simular fluctuaciones en la red de abastecimiento y observa el comportamiento del sistema de alertas.</p>
+            </div>
+
+            <!-- Controls & Live Data Grid -->
+            <div class="grid lg:grid-cols-12 gap-8">
+                
+                <!-- Controls Side (Sliders) -->
+                <div class="lg:col-span-4 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-lg space-y-6">
+                    <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-brand-600"></i>
+                        Simular Parámetros SIAPA
+                    </h3>
+
+                    <!-- Preset Buttons -->
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase">Escenarios Preconfigurados:</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="resetSimulator()" class="py-1.5 px-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold transition-colors">
+                                <i class="fa-solid fa-check text-emerald-500 mr-1"></i> Normal
+                            </button>
+                            <button onclick="simulateCrisis()" class="py-1.5 px-2 bg-red-100 dark:bg-red-950/80 hover:bg-red-200 dark:hover:bg-red-900 text-red-700 dark:text-red-300 rounded-lg text-xs font-semibold transition-colors">
+                                <i class="fa-solid fa-triangle-exclamation text-red-500 mr-1"></i> Agua Turbia
+                            </button>
+                            <button onclick="simulateAcid()" class="py-1.5 px-2 bg-purple-100 dark:bg-purple-950/80 hover:bg-purple-200 dark:hover:bg-purple-900 text-purple-700 dark:text-purple-300 rounded-lg text-xs font-semibold transition-colors">
+                                <i class="fa-solid fa-flask text-purple-500 mr-1"></i> pH Ácido
+                            </button>
+                            <button onclick="simulateLowTank()" class="py-1.5 px-2 bg-amber-100 dark:bg-amber-950/80 hover:bg-amber-200 dark:hover:bg-amber-900 text-amber-700 dark:text-amber-300 rounded-lg text-xs font-semibold transition-colors">
+                                <i class="fa-solid fa-box text-amber-500 mr-1"></i> Tinaco Bajo
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Slider 1: Turbiedad SIAPA -->
+                    <div class="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <div class="flex justify-between text-xs font-semibold">
+                            <label for="ctrl-turb" class="text-slate-700 dark:text-slate-300">Turbiedad Entrada (NTU):</label>
+                            <span id="val-turb" class="text-brand-600 font-mono font-bold">4.8 NTU</span>
+                        </div>
+                        <input type="range" id="ctrl-turb" min="0.1" max="15.0" step="0.1" value="4.8" 
+                               class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-brand-600"
+                               oninput="updateSimulator()">
+                        <p class="text-[10px] text-slate-400">&gt; 5.0 NTU activa alerta de agua sucia en red.</p>
+                    </div>
+
+                    <!-- Slider 2: pH Entrada -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs font-semibold">
+                            <label for="ctrl-ph" class="text-slate-700 dark:text-slate-300">pH Red Entrada:</label>
+                            <span id="val-ph" class="text-brand-600 font-mono font-bold">6.9 pH</span>
+                        </div>
+                        <input type="range" id="ctrl-ph" min="4.0" max="10.0" step="0.1" value="6.9" 
+                               class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-brand-600"
+                               oninput="updateSimulator()">
+                        <p class="text-[10px] text-slate-400">Rango ideal NOM-127: 6.5 - 8.5 pH.</p>
+                    </div>
+
+                    <!-- Slider 3: TDS Entrada -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs font-semibold">
+                            <label for="ctrl-tds" class="text-slate-700 dark:text-slate-300">Sólidos Disueltos (TDS):</label>
+                            <span id="val-tds" class="text-brand-600 font-mono font-bold">350 ppm</span>
+                        </div>
+                        <input type="range" id="ctrl-tds" min="50" max="800" step="10" value="350" 
+                               class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-brand-600"
+                               oninput="updateSimulator()">
+                        <p class="text-[10px] text-slate-400">&gt; 500 ppm requiere mantenimiento anticipado.</p>
+                    </div>
+
+                    <!-- Slider 4: Nivel Tinaco -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs font-semibold">
+                            <label for="ctrl-nivel" class="text-slate-700 dark:text-slate-300">Nivel de Tinaco (%):</label>
+                            <span id="val-nivel" class="text-brand-600 font-mono font-bold">75 %</span>
+                        </div>
+                        <input type="range" id="ctrl-nivel" min="0" max="100" step="5" value="75" 
+                               class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-brand-600"
+                               oninput="updateSimulator()">
+                        <p class="text-[10px] text-slate-400">&lt; 20% activa notificación de desabasto.</p>
+                    </div>
+                </div>
+
+                <!-- Cards Status Grid -->
+                <div class="lg:col-span-8 space-y-6">
+                    
+                    <!-- Alert Status Banner -->
+                    <div id="sim-alert-box" class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/80 border border-amber-200 dark:border-amber-800 flex items-center justify-between transition-all">
+                        <div class="flex items-center gap-3">
+                            <i id="sim-alert-icon" class="fa-solid fa-triangle-exclamation text-amber-500 text-xl"></i>
+                            <div>
+                                <h4 id="sim-alert-title" class="font-bold text-amber-900 dark:text-amber-200 text-sm">Estado de Entrada: Advertencia de Turbiedad</h4>
+                                <p id="sim-alert-desc" class="text-xs text-amber-700 dark:text-amber-300">Agua con sedimentos moderados ingresando desde la red pública.</p>
+                            </div>
+                        </div>
+                        <span id="sim-alert-badge" class="px-3 py-1 rounded-full bg-amber-200 dark:bg-amber-900 text-amber-800 dark:text-amber-200 text-xs font-bold">Precaución</span>
+                    </div>
+
+                    <!-- Sensor Stage Visualizations -->
+                    <div class="grid md:grid-cols-3 gap-4">
+                        
+                        <!-- Stage 1 -->
+                        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+                            <div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+                                <span class="text-xs font-bold text-slate-500 dark:text-slate-400">Etapa 1</span>
+                                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">Red SIAPA</span>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="text-xs text-slate-500 dark:text-slate-400">Turbiedad: <span id="disp-turb" class="font-bold text-slate-800 dark:text-white font-mono">4.8 NTU</span></div>
+                                <div class="text-xs text-slate-500 dark:text-slate-400">pH: <span id="disp-ph" class="font-bold text-slate-800 dark:text-white font-mono">6.9</span></div>
+                                <div class="text-xs text-slate-500 dark:text-slate-400">TDS: <span id="disp-tds" class="font-bold text-slate-800 dark:text-white font-mono">350 ppm</span></div>
+                            </div>
+                        </div>
+
+                        <!-- Stage 2 -->
+                        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+                            <div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+                                <span class="text-xs font-bold text-slate-500 dark:text-slate-400">Etapa 2</span>
+                                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">Tinaco Hogar</span>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="text-xs text-slate-500 dark:text-slate-400">Nivel Agua: <span id="disp-nivel" class="font-bold text-slate-800 dark:text-white font-mono">75 %</span></div>
+                                <div class="text-xs text-slate-500 dark:text-slate-400">Temp: <span class="font-bold text-slate-800 dark:text-white font-mono">24 °C</span></div>
+                                <div class="text-xs text-slate-500 dark:text-slate-400">Estado Tinaco: <span id="disp-tinaco-status" class="font-bold text-emerald-600 font-mono">Limpio</span></div>
+                            </div>
+                        </div>
+
+                        <!-- Stage 3 -->
+                        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+                            <div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+                                <span class="text-xs font-bold text-slate-500 dark:text-slate-400">Etapa 3</span>
+                                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold">Post-Filtro</span>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="text-xs text-slate-500 dark:text-slate-400">Turbiedad Final: <span id="disp-turb-post" class="font-bold text-emerald-600 dark:text-emerald-400 font-mono">0.3 NTU</span></div>
+                                <div class="text-xs text-slate-500 dark:text-slate-400">pH Salida: <span id="disp-ph-post" class="font-bold text-emerald-600 dark:text-emerald-400 font-mono">7.1</span></div>
+                                <div class="text-xs text-slate-500 dark:text-slate-400">TDS Salida: <span id="disp-tds-post" class="font-bold text-emerald-600 dark:text-emerald-400 font-mono">120 ppm</span></div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Realtime Chart -->
+                    <div class="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-lg">
+                        <div class="flex justify-between items-center mb-4">
+                            <h4 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Histórico de Lectura en Tiempo Real (Turbiedad NTU)</h4>
+                            <span class="text-[10px] font-mono text-emerald-500 flex items-center gap-1">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                TRANSMITIENDO
+                            </span>
+                        </div>
+                        <div class="h-48 w-full">
+                            <canvas id="realtimeChart"></canvas>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <section id="app-demo" class="py-16 bg-white dark:bg-slate-900 transition-colors">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid lg:grid-cols-12 gap-12 items-center">
+                
+                <div class="lg:col-span-6 space-y-6">
+                    <span class="text-brand-600 font-extrabold uppercase tracking-wider text-xs bg-brand-50 dark:bg-brand-950 px-3 py-1 rounded-full border border-brand-200 dark:border-brand-800">Experiencia de Usuario</span>
+                    <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white">Aplicación Móvil "Mi Agua"</h2>
+                    <p class="text-slate-600 dark:text-slate-300 text-base leading-relaxed">
+                        Desarrollada para iOS y Android en Flutter, "Mi Agua" ofrece una interfaz limpia donde los ciudadanos monitorean en tiempo real la calidad del agua de su hogar, reciben alertas push inmediatas y generan evidencias en PDF.
+                    </p>
+
+                    <div class="space-y-4 pt-2">
+                        <div class="flex items-start gap-4">
+                            <div class="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-950 text-brand-600 dark:text-brand-400 flex items-center justify-center font-bold flex-shrink-0">
+                                <i class="fa-solid fa-bell"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-900 dark:text-white text-sm">Notificaciones Automatizadas</h4>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">Aviso preventivo en el celular cuando el agua de la red pública llega turbia para sugerir cerrar el paso al tinaco.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start gap-4">
+                            <div class="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold flex-shrink-0">
+                                <i class="fa-solid fa-calendar-check"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-900 dark:text-white text-sm">Mantenimiento Predictivo</h4>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">Algoritmo que calcula el desgaste del filtro de carbón activado según los litros filtrados y la carga de partículas.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start gap-4">
+                            <div class="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold flex-shrink-0">
+                                <i class="fa-solid fa-scale-balanced"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-900 dark:text-white text-sm">Dictamen Técnico Exportable</h4>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">Emisión de reportes con estampa de tiempo e ID de sensor para presentar reclamos formales ante el SIAPA.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mobile Phone Frame Preview (Interactive Tabs) -->
+                <div class="lg:col-span-6 flex justify-center">
+                    <div class="w-80 h-[580px] bg-slate-900 rounded-[48px] p-4 shadow-2xl relative border-4 border-slate-800">
+                        <div class="phone-notch"></div>
+                        
+                        <!-- Phone Screen Content -->
+                        <div class="w-full h-full bg-slate-50 dark:bg-slate-900 rounded-[36px] overflow-hidden pt-7 pb-3 px-3 flex flex-col justify-between font-sans relative">
+                            
+                            <!-- Phone App Header -->
+                            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-7 h-7 rounded-lg bg-brand-600 text-white flex items-center justify-center text-xs">
+                                        <i class="fa-solid fa-droplet"></i>
+                                    </div>
+                                    <span class="font-bold text-slate-900 dark:text-white text-xs">Mi Agua ZMG</span>
+                                </div>
+                                <span class="text-[10px] font-mono text-emerald-500 font-bold">CONECTADO</span>
+                            </div>
+
+                            <!-- Phone Screen Tab Content Area -->
+                            <div id="phone-screen-body" class="space-y-3 py-2 overflow-y-auto flex-1">
+                                <!-- Default Tab: Dashboard -->
+                                <div class="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-1.5">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-[9px] font-bold uppercase text-slate-400">Entrada (SIAPA)</span>
+                                        <span id="app-badge-siapa" class="text-[9px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">Precaución</span>
+                                    </div>
+                                    <div class="flex justify-between items-baseline">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Turbiedad:</span>
+                                        <span id="app-turb-val" class="font-mono text-xs font-bold text-slate-900 dark:text-white">4.8 NTU</span>
+                                    </div>
+                                    <div class="flex justify-between items-baseline">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">pH Red:</span>
+                                        <span id="app-ph-val" class="font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">6.9 pH</span>
+                                    </div>
+                                </div>
+
+                                <div class="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-1.5">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-[9px] font-bold uppercase text-slate-400">Tinaco Hogar</span>
+                                        <span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">Normal</span>
+                                    </div>
+                                    <div class="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+                                        <div id="app-nivel-bar" class="bg-brand-500 h-2 rounded-full" style="width: 75%"></div>
+                                    </div>
+                                    <div class="flex justify-between text-[10px] text-slate-600 dark:text-slate-300">
+                                        <span>Nivel: <strong id="app-nivel-val">75%</strong></span>
+                                        <span>Temp: <strong>24°C</strong></span>
+                                    </div>
+                                </div>
+
+                                <div class="p-3 rounded-2xl bg-emerald-600 text-white shadow-md space-y-1">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-[9px] font-bold uppercase text-emerald-200">Consumo Seguro</span>
+                                        <i class="fa-solid fa-circle-check text-white text-xs"></i>
+                                    </div>
+                                    <div class="text-xs font-bold">Filtro Doméstico Activo</div>
+                                    <div class="text-[9px] text-emerald-100">Turbiedad salida: 0.3 NTU (Óptimo)</div>
+                                </div>
+                            </div>
+
+                            <!-- Phone Interactive Bottom Navigation -->
+                            <div class="border-t border-slate-200 dark:border-slate-800 pt-2 flex justify-around text-slate-400 text-xs">
+                                <button onclick="switchPhoneTab('home')" id="ptab-home" class="text-brand-600 dark:text-brand-400 text-center flex flex-col items-center">
+                                    <i class="fa-solid fa-house text-xs"></i>
+                                    <span class="text-[8px] mt-0.5">Inicio</span>
+                                </button>
+                                <button onclick="switchPhoneTab('alerts')" id="ptab-alerts" class="text-center flex flex-col items-center hover:text-brand-600">
+                                    <i class="fa-solid fa-bell text-xs"></i>
+                                    <span class="text-[8px] mt-0.5">Alertas</span>
+                                </button>
+                                <button onclick="openReportModal()" class="text-center flex flex-col items-center hover:text-brand-600">
+                                    <i class="fa-solid fa-file-pdf text-xs text-amber-500"></i>
+                                    <span class="text-[8px] mt-0.5">Reporte</span>
+                                </button>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <section id="negocio" class="py-16 bg-slate-900 text-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-14">
+                <span class="text-cyan-400 font-extrabold uppercase tracking-wider text-xs bg-slate-800 px-3 py-1 rounded-full border border-slate-700">Modelo de Negocio & Sustentabilidad</span>
+                <h2 class="text-3xl sm:text-4xl font-extrabold text-white mt-3">Estrategia Comercial y Escalamiento</h2>
+                <p class="text-slate-400 mt-2 text-sm">Modelos adaptados para viviendas particulares, desarrollos residenciales e instituciones públicas.</p>
+            </div>
+
+            <!-- Value Prop & Tiers -->
+            <div class="grid md:grid-cols-3 gap-8 mb-12">
+                <!-- Hardware Kit -->
+                <div class="p-8 rounded-3xl bg-slate-800 border border-slate-700 space-y-4 hover:border-cyan-500 transition-all">
+                    <div class="text-cyan-400 text-xs font-bold uppercase tracking-wider">Venta Directa Hardware</div>
+                    <h3 class="text-2xl font-black text-white">Kit Residencial IoT</h3>
+                    <div class="text-3xl font-extrabold text-white">$2,850 <span class="text-xs text-slate-400 font-normal">MXN (Pago único)</span></div>
+                    <ul class="text-xs text-slate-300 space-y-2.5 pt-2">
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-cyan-400"></i> Microcontrolador ESP32 programado</li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-cyan-400"></i> Sensores SEN0189, DS18B20 y pH</li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-cyan-400"></i> Sensor ultrasónico de tinaco</li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-cyan-400"></i> Kit de acoples para tubería estándar</li>
+                    </ul>
+                </div>
+
+                <!-- SaaS Subscription -->
+                <div class="p-8 rounded-3xl bg-gradient-to-b from-brand-900 to-slate-800 border-2 border-brand-500 space-y-4 relative shadow-xl">
+                    <div class="absolute -top-3 right-6 px-3 py-0.5 rounded-full bg-brand-500 text-white text-[10px] font-bold uppercase">Popular</div>
+                    <div class="text-brand-300 text-xs font-bold uppercase tracking-wider">Suscripción Nube</div>
+                    <h3 class="text-2xl font-black text-white">App "Mi Agua Premium"</h3>
+                    <div class="text-3xl font-extrabold text-white">$99 <span class="text-xs text-slate-400 font-normal">MXN / mes</span></div>
+                    <ul class="text-xs text-slate-300 space-y-2.5 pt-2">
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-brand-400"></i> Monitoreo en vivo 24/7 en la nube</li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-brand-400"></i> Alertas ilimitadas vía WhatsApp / Push</li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-brand-400"></i> Generación automatizada de reportes SIAPA</li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-brand-400"></i> Predicción del desgaste de cartuchos de filtro</li>
+                    </ul>
+                </div>
+
+                <!-- B2B Enterprise -->
+                <div class="p-8 rounded-3xl bg-slate-800 border border-slate-700 space-y-4 hover:border-cyan-500 transition-all">
+                    <div class="text-cyan-400 text-xs font-bold uppercase tracking-wider">Cotos & Corporativos</div>
+                    <h3 class="text-2xl font-black text-white">Red Multinodo B2B</h3>
+                    <div class="text-3xl font-extrabold text-white">Cotización B2B</div>
+                    <ul class="text-xs text-slate-300 space-y-2.5 pt-2">
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-cyan-400"></i> Despliegue de red en fraccionamientos</li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-cyan-400"></i> Dashboard para administradores de condominio</li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-cyan-400"></i> API de integración con sistemas existentes</li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-cyan-400"></i> Soporte técnico prioritario y mantenimientos</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="equipo" class="py-16 bg-white dark:bg-slate-900 transition-colors">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-14">
+                <span class="text-brand-600 font-extrabold uppercase tracking-wider text-xs bg-brand-50 dark:bg-brand-950 px-3 py-1 rounded-full border border-brand-200 dark:border-brand-800">Centro Universitario de Guadalajara</span>
+                <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white mt-3">Equipo 1 - CUGDL Universidad de Guadalajara</h2>
+                <p class="text-slate-600 dark:text-slate-300 mt-2 text-sm">Proyecto Integrador Interdisciplinario: Ciberseguridad, Inteligencia Artificial, Inteligencia Financiera y Creatividad Digital.</p>
+            </div>
+
+            <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                
+                <!-- Erika Goretti -->
+                <div class="p-6 rounded-3xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-4 hover:shadow-lg transition-all">
+                    <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-600 to-cyan-500 text-white flex items-center justify-center font-bold text-2xl shadow-md">
+                        EP
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-900 dark:text-white">León Pérez Erika Goretti</h3>
+                        <p class="text-xs text-brand-600 dark:text-brand-400 font-semibold">CUGDL - Universidad de Guadalajara</p>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5 pt-2">
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">Ciberseguridad</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">Inteligencia Artificial</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">Inteligencia Financiera</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">Creatividad Digital</span>
+                    </div>
+                </div>
+
+                <!-- Member 2 -->
+                <div class="p-6 rounded-3xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-4 hover:shadow-lg transition-all">
+                    <div class="w-16 h-16 rounded-2xl bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center font-bold text-2xl">
+                        E2
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-800 dark:text-white">Integrante de Equipo 1</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">CUGDL - Universidad de Guadalajara</p>
+                    </div>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Arquitectura de Hardware IoT y calibración de sensores de turbiedad.</p>
+                </div>
+
+                <!-- Member 3 -->
+                <div class="p-6 rounded-3xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-4 hover:shadow-lg transition-all">
+                    <div class="w-16 h-16 rounded-2xl bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center font-bold text-2xl">
+                        E3
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-800 dark:text-white">Integrante de Equipo 1</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">CUGDL - Universidad de Guadalajara</p>
+                    </div>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Procesamiento de datos hídricos en la nube y diseño de interfaz móvil.</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+
+    <!-- MODAL 1: SIAPA Technical Report Generator -->
+    <div id="modal-report" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-file-shield text-brand-600 text-xl"></i>
+                    <h3 class="font-extrabold text-slate-900 dark:text-white text-lg">Generador de Reporte Técnico SIAPA</h3>
+                </div>
+                <button onclick="closeReportModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-600 dark:text-slate-300">
+                Este formato compila las lecturas del sensor IoT junto con tu localización para generar un documento en PDF de validez comunitaria.
+            </p>
+
+            <form id="siapa-report-form" onsubmit="generatePDFReport(event)" class="space-y-3 text-xs">
+                <div>
+                    <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nombre Completo del Titular:</label>
+                    <input type="text" id="rep-name" required placeholder="Ej. Ana María Gómez" class="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Municipio / Colonia:</label>
+                        <input type="text" id="rep-colonia" required placeholder="Ej. Providencia, Zapopan" class="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Número de Cuenta SIAPA:</label>
+                        <input type="text" id="rep-cuenta" placeholder="Ej. 12345678" class="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Descripción del Problema Observado:</label>
+                    <textarea id="rep-desc" rows="3" class="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white" placeholder="Agua turbia de color marrón con olor desagradable desde las 8:00 AM..."></textarea>
+                </div>
+
+                <div class="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl space-y-1 text-[11px]">
+                    <div class="font-bold text-slate-700 dark:text-slate-300">Lecturas Adjuntas del Sensor IoT:</div>
+                    <div class="flex justify-between text-slate-600 dark:text-slate-400">
+                        <span>Turbiedad SIAPA: <strong id="modal-turb-val" class="text-brand-600">4.8 NTU</strong></span>
+                        <span>pH: <strong id="modal-ph-val" class="text-brand-600">6.9</strong></span>
+                        <span>TDS: <strong id="modal-tds-val" class="text-brand-600">350 ppm</strong></span>
+                    </div>
+                </div>
+
+                <div class="pt-2 flex justify-end gap-3">
+                    <button type="button" onclick="closeReportModal()" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">Cancelar</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold flex items-center gap-2">
+                        <i class="fa-solid fa-print"></i> Imprimir / Guardar Reporte PDF
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: ESP32 Firmware Code Viewer -->
+    <div id="modal-firmware" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 text-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-800 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-code text-cyan-400 text-xl"></i>
+                    <h3 class="font-bold text-white text-base">Código Firmware ESP32 (Arduino C++)</h3>
+                </div>
+                <button onclick="toggleFirmwareModal()" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="relative">
+                <button onclick="copyFirmwareCode()" class="absolute top-2 right-2 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] rounded font-mono border border-slate-700">
+                    <i class="fa-solid fa-copy mr-1"></i> Copiar
+                </button>
+                <pre class="p-4 rounded-xl bg-slate-950 font-mono text-[11px] text-cyan-300 overflow-x-auto max-h-96 leading-relaxed"><code id="firmware-code">// AquaGuard IoT - ESP32 Main Firmware
+// CUGDL - Universidad de Guadalajara
+#include &lt;WiFi.h&gt;
+#include &lt;OneWire.h&gt;
+#include &lt;DallasTemperature.h&gt;
+
+#define TURBIDITY_PIN 34
+#define PH_PIN 35
+#define ONE_WIRE_BUS 4
+
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature tempSensors(&oneWire);
+
+void setup() {
+  Serial.begin(115200);
+  tempSensors.begin();
+  pinMode(TURBIDITY_PIN, INPUT);
+  Serial.println("AquaGuard IoT Node Initialized");
+}
+
+void loop() {
+  int rawTurb = analogRead(TURBIDITY_PIN);
+  float voltageTurb = rawTurb * (3.3 / 4095.0);
+  float ntu = -1120.4 * (voltageTurb * voltageTurb) + 5742.3 * voltageTurb - 4352.9;
+  if(ntu < 0) ntu = 0;
+
+  tempSensors.requestTemperatures();
+  float tempC = tempSensors.getTempCByIndex(0);
+
+  Serial.print("Turbiedad: "); Serial.print(ntu); Serial.println(" NTU");
+  Serial.print("Temperatura: "); Serial.print(tempC); Serial.println(" C");
+
+  delay(2000);
+}</code></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: Double Filter Methodology Framework -->
+    <div id="modal-framework" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
+                <h3 class="font-bold text-slate-900 dark:text-white text-base">Marco Epistemológico: SIFT + CRAAP</h3>
+                <button onclick="toggleFrameworkModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="space-y-3 text-xs text-slate-600 dark:text-slate-300">
+                <div class="p-3 bg-brand-50 dark:bg-brand-950/60 rounded-xl border border-brand-200 dark:border-brand-800">
+                    <h4 class="font-bold text-brand-900 dark:text-brand-300 mb-1">Método SIFT (Stop, Investigate, Find, Trace):</h4>
+                    <p>Detiene la desinformación al verificar reportes de redes sociales contra sensores calibrados en campo e investigaciones de la Universidad de Guadalajara e ITESO.</p>
+                </div>
+
+                <div class="p-3 bg-cyan-50 dark:bg-cyan-950/60 rounded-xl border border-cyan-200 dark:border-cyan-800">
+                    <h4 class="font-bold text-cyan-900 dark:text-cyan-300 mb-1">Test CRAAP (Currency, Relevance, Authority, Accuracy, Purpose):</h4>
+                    <p>Evalúa la vigencia de las muestras, la reputación de laboratorios consultados y la precisión técnica de los dispositivos IoT frente a estándares de la NOM-127-SSA1.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-slate-900 text-slate-400 py-12 border-t border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-brand-600 text-white flex items-center justify-center font-bold">
+                        <i class="fa-solid fa-faucet-drip text-sm"></i>
+                    </div>
+                    <span class="text-white font-extrabold text-base">AquaGuard IoT ZMG</span>
+                </div>
+                <div class="text-xs text-center md:text-right">
+                    <p>Proyecto Integrador - Centro Universitario de Guadalajara (CUGDL - UdeG)</p>
+                    <p class="text-slate-500 mt-1">Metodología Doble Filtro (SIFT + CRAAP) aplicada para la resiliencia hídrica metropolitana.</p>
+                </div>
+            </div>
+            <div class="border-t border-slate-800 pt-6 text-center text-xs text-slate-600">
+                &copy; 2026 AquaGuard IoT. Desarrollado para la Zona Metropolitana de Guadalajara.
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        let realtimeChart;
+        let map;
+        let chartData = [2.1, 2.5, 3.2, 4.1, 4.8, 4.5, 4.8];
+        let chartLabels = ['10:00', '10:05', '10:10', '10:15', '10:20', '10:25', '10:30'];
+
+        const zmgZones = [
+            { name: "Providencia", municipio: "Zapopan", lat: 20.692, lng: -103.385, turb: 1.8, ph: 7.2, tds: 210, status: "Normal", badgeClass: "bg-emerald-100 text-emerald-800", note: "Calidad de suministro adecuada dentro de norma." },
+            { name: "Oblatos", municipio: "Guadalajara", lat: 20.698, lng: -103.310, turb: 7.2, ph: 6.2, tds: 520, status: "Agua Turbia", badgeClass: "bg-red-100 text-red-800", note: "Alerta: Descarga con sedimentos коричне y olor fétido reportado." },
+            { name: "Centro Histórico", municipio: "Guadalajara", lat: 20.676, lng: -103.347, turb: 4.5, ph: 6.8, tds: 380, status: "Precaución", badgeClass: "bg-amber-100 text-amber-800", note: "Turbiedad moderada procedente de tuberías antiguas." },
+            { name: "El Colli Urbano", municipio: "Zapopan", lat: 20.638, lng: -103.420, turb: 2.2, ph: 7.1, tds: 240, status: "Normal", badgeClass: "bg-emerald-100 text-emerald-800", note: "Suministro estable y nivel de pH neutro." },
+            { name: "Tlaquepaque Centro", municipio: "Tlaquepaque", lat: 20.640, lng: -103.312, turb: 5.8, ph: 6.4, tds: 460, status: "Alerta", badgeClass: "bg-red-100 text-red-800", note: "Presencia de arrastre de sedimentos en la red." }
+        ];
+
+        let selectedZone = zmgZones[0];
+
+        window.onload = function() {
+            initChart();
+            initMap();
+            updateSimulator();
+        };
+
+        function initChart() {
+            const ctx = document.getElementById('realtimeChart').getContext('2d');
+            realtimeChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        label: 'Turbiedad Red SIAPA (NTU)',
+                        data: chartData,
+                        borderColor: '#0284c7',
+                        backgroundColor: 'rgba(2, 132, 199, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#0284c7'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            suggestedMax: 10,
+                            grid: { color: 'rgba(226, 232, 240, 0.5)' }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function initMap() {
+            map = L.map('zmg-map').setView([20.6736, -103.3444], 11);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+
+            zmgZones.forEach(zone => {
+                const color = zone.turb > 5.0 ? '#ef4444' : (zone.turb > 3.0 ? '#f59e0b' : '#10b981');
+                const circle = L.circleMarker([zone.lat, zone.lng], {
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: 0.7,
+                    radius: 10
+                }).addTo(map);
+
+                circle.bindPopup(`<b>${zone.name} (${zone.municipio})</b><br>Turbiedad: ${zone.turb} NTU<br>Estado: ${zone.status}`);
+                
+                circle.on('click', () => {
+                    selectZone(zone);
+                });
+            });
+        }
+
+        function selectZone(zone) {
+            selectedZone = zone;
+            document.getElementById('zone-municipio').innerText = zone.municipio;
+            document.getElementById('zone-colonia').innerText = 'Colonia ' + zone.name;
+            document.getElementById('zone-turb').innerText = zone.turb + ' NTU';
+            document.getElementById('zone-ph').innerText = zone.ph + ' pH';
+            document.getElementById('zone-tds').innerText = zone.tds + ' ppm';
+            document.getElementById('zone-note').innerText = zone.note;
+            document.getElementById('zone-badge').innerText = zone.status;
+            document.getElementById('zone-badge').className = `px-3 py-1 rounded-full text-xs font-bold ${zone.badgeClass}`;
+        }
+
+        function loadZoneToSimulator() {
+            document.getElementById('ctrl-turb').value = selectedZone.turb;
+            document.getElementById('ctrl-ph').value = selectedZone.ph;
+            document.getElementById('ctrl-tds').value = selectedZone.tds;
+            updateSimulator();
+            document.getElementById('dashboard').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function updateSimulator() {
+            const turb = parseFloat(document.getElementById('ctrl-turb').value);
+            const ph = parseFloat(document.getElementById('ctrl-ph').value);
+            const tds = parseInt(document.getElementById('ctrl-tds').value);
+            const nivel = parseInt(document.getElementById('ctrl-nivel').value);
+
+            // Update Labels
+            document.getElementById('val-turb').innerText = turb.toFixed(1) + ' NTU';
+            document.getElementById('val-ph').innerText = ph.toFixed(1) + ' pH';
+            document.getElementById('val-tds').innerText = tds + ' ppm';
+            document.getElementById('val-nivel').innerText = nivel + ' %';
+
+            // Update Stage 1
+            document.getElementById('disp-turb').innerText = turb.toFixed(1) + ' NTU';
+            document.getElementById('disp-ph').innerText = ph.toFixed(1);
+            document.getElementById('disp-tds').innerText = tds + ' ppm';
+
+            // Update Stage 2
+            document.getElementById('disp-nivel').innerText = nivel + ' %';
+
+            // Post Filter math
+            const postTurb = (turb * 0.08).toFixed(1);
+            const postPh = (ph < 6.5) ? '6.8' : (ph > 8.5 ? '7.4' : ph.toFixed(1));
+            const postTds = Math.round(tds * 0.35);
+
+            document.getElementById('disp-turb-post').innerText = postTurb + ' NTU';
+            document.getElementById('disp-ph-post').innerText = postPh;
+            document.getElementById('disp-tds-post').innerText = postTds + ' ppm';
+
+            // Hero preview
+            document.getElementById('hero-turb1').innerText = turb.toFixed(1);
+            document.getElementById('hero-nivel').innerText = nivel;
+            document.getElementById('hero-tds').innerText = postTds;
+
+            // App preview
+            document.getElementById('app-turb-val').innerText = turb.toFixed(1) + ' NTU';
+            document.getElementById('app-ph-val').innerText = ph.toFixed(1) + ' pH';
+            document.getElementById('app-nivel-val').innerText = nivel + '%';
+            document.getElementById('app-nivel-bar').style.width = nivel + '%';
+
+            // Modal sync
+            document.getElementById('modal-turb-val').innerText = turb.toFixed(1) + ' NTU';
+            document.getElementById('modal-ph-val').innerText = ph.toFixed(1);
+            document.getElementById('modal-tds-val').innerText = tds + ' ppm';
+
+            // Alert logic
+            const alertBox = document.getElementById('sim-alert-box');
+            const alertIcon = document.getElementById('sim-alert-icon');
+            const alertTitle = document.getElementById('sim-alert-title');
+            const alertDesc = document.getElementById('sim-alert-desc');
+            const alertBadge = document.getElementById('sim-alert-badge');
+            const appBadge = document.getElementById('app-badge-siapa');
+
+            if (turb > 5.0 || ph < 6.0 || ph > 9.0) {
+                alertBox.className = "p-4 rounded-2xl bg-red-50 dark:bg-red-950/80 border border-red-200 dark:border-red-800 flex items-center justify-between transition-all";
+                alertIcon.className = "fa-solid fa-circle-exclamation text-red-600 text-xl";
+                alertTitle.innerText = "Alerta Crítica: Agua Contaminada en Red SIAPA";
+                alertDesc.innerText = "Parámetros fuera de norma NOM-127-SSA1. Válvula recomendada: Cerrada.";
+                alertBadge.innerText = "Peligro";
+                alertBadge.className = "px-3 py-1 rounded-full bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200 text-xs font-bold";
+                appBadge.innerText = "Alerta";
+                appBadge.className = "text-[9px] px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-bold";
+            } else if (turb > 3.0) {
+                alertBox.className = "p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/80 border border-amber-200 dark:border-amber-800 flex items-center justify-between transition-all";
+                alertIcon.className = "fa-solid fa-triangle-exclamation text-amber-500 text-xl";
+                alertTitle.innerText = "Estado de Entrada: Advertencia de Turbiedad";
+                alertDesc.innerText = "Sedimentos moderados detectados en la red pública de distribución.";
+                alertBadge.innerText = "Precaución";
+                alertBadge.className = "px-3 py-1 rounded-full bg-amber-200 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-xs font-bold";
+                appBadge.innerText = "Precaución";
+                appBadge.className = "text-[9px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold";
+            } else {
+                alertBox.className = "p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between transition-all";
+                alertIcon.className = "fa-solid fa-circle-check text-emerald-600 text-xl";
+                alertTitle.innerText = "Estado de Entrada: Calidad Óptima";
+                alertDesc.innerText = "Niveles dentro de los estándares de potabilidad de la NOM-127.";
+                alertBadge.innerText = "Normal";
+                alertBadge.className = "px-3 py-1 rounded-full bg-emerald-200 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-xs font-bold";
+                appBadge.innerText = "Normal";
+                appBadge.className = "text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold";
+            }
+
+            // Push to Chart
+            if (realtimeChart) {
+                const now = new Date();
+                const timeStr = now.getHours() + ':' + (now.getMinutes()<10?'0':'') + now.getMinutes() + ':' + (now.getSeconds()<10?'0':'') + now.getSeconds();
+                
+                realtimeChart.data.labels.push(timeStr);
+                realtimeChart.data.datasets[0].data.push(turb);
+
+                if (realtimeChart.data.labels.length > 8) {
+                    realtimeChart.data.labels.shift();
+                    realtimeChart.data.datasets[0].data.shift();
+                }
+                realtimeChart.update();
+            }
+        }
+
+        function resetSimulator() {
+            document.getElementById('ctrl-turb').value = 1.2;
+            document.getElementById('ctrl-ph').value = 7.2;
+            document.getElementById('ctrl-tds').value = 180;
+            document.getElementById('ctrl-nivel').value = 85;
+            updateSimulator();
+        }
+
+        function simulateCrisis() {
+            document.getElementById('ctrl-turb').value = 9.5;
+            document.getElementById('ctrl-ph').value = 6.1;
+            document.getElementById('ctrl-tds').value = 580;
+            document.getElementById('ctrl-nivel').value = 50;
+            updateSimulator();
+        }
+
+        function simulateAcid() {
+            document.getElementById('ctrl-turb').value = 2.5;
+            document.getElementById('ctrl-ph').value = 5.1;
+            document.getElementById('ctrl-tds').value = 420;
+            document.getElementById('ctrl-nivel').value = 80;
+            updateSimulator();
+        }
+
+        function simulateLowTank() {
+            document.getElementById('ctrl-turb').value = 1.5;
+            document.getElementById('ctrl-ph').value = 7.1;
+            document.getElementById('ctrl-tds').value = 200;
+            document.getElementById('ctrl-nivel').value = 15;
+            updateSimulator();
+        }
+
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+        }
+
+        function openReportModal() {
+            document.getElementById('modal-report').classList.remove('hidden');
+        }
+
+        function closeReportModal() {
+            document.getElementById('modal-report').classList.add('hidden');
+        }
+
+        function toggleFirmwareModal() {
+            document.getElementById('modal-firmware').classList.toggle('hidden');
+        }
+
+        function toggleFrameworkModal() {
+            document.getElementById('modal-framework').classList.toggle('hidden');
+        }
+
+        function copyFirmwareCode() {
+            const code = document.getElementById('firmware-code').innerText;
+            const tempInput = document.createElement('textarea');
+            tempInput.value = code;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            alert('Código de firmware copiado al portapapeles');
+        }
+
+        function generatePDFReport(e) {
+            e.preventDefault();
+            window.print();
+        }
+
+        function switchPhoneTab(tab) {
+            const body = document.getElementById('phone-screen-body');
+            if (tab === 'alerts') {
+                body.innerHTML = `
+                    <div class="p-3 rounded-xl bg-amber-50 dark:bg-amber-950 border border-amber-200 text-xs space-y-1">
+                        <div class="font-bold text-amber-900 dark:text-amber-200">Alerta 10:24 AM</div>
+                        <p class="text-[10px] text-amber-800 dark:text-amber-300">Turbiedad elevada en la red (4.8 NTU). Se sugiere cerrar llave de paso.</p>
+                    </div>
+                    <div class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 text-xs space-y-1">
+                        <div class="font-bold text-slate-800 dark:text-slate-200">Aviso 08:00 AM</div>
+                        <p class="text-[10px] text-slate-600 dark:text-slate-400">Tinaco al 75% de capacidad.</p>
+                    </div>
+                `;
+            } else {
+                body.innerHTML = `
+                    <div class="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 shadow-sm space-y-1.5">
+                        <div class="flex justify-between items-center">
+                            <span class="text-[9px] font-bold uppercase text-slate-400">Entrada SIAPA</span>
+                            <span class="text-[9px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">Precaución</span>
+                        </div>
+                        <div class="flex justify-between text-xs">
+                            <span>Turbiedad:</span>
+                            <strong class="font-mono text-slate-900 dark:text-white">4.8 NTU</strong>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
